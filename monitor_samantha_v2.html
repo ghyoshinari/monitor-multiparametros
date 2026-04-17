@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor Multiparamétrico</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+  html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0a0e14;
+    --panel: #111820;
+    --border: #1e2a36;
+    --ecg-color: #00ff41;
+    --spo2-color: #00d4ff;
+    --nibp-color: #ff3333;
+    --rr-color: #ffcc00;
+    --temp-color: #ff8800;
+    --etco2-color: #cc88ff;
+    --hr-color: #00ff41;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Exo 2', sans-serif;
+    background: var(--bg);
+    color: #c8d0d8;
+  }
+
+  .mono { font-family: 'Share Tech Mono', monospace; }
+
+  .monitor-wrapper {
+    width: 100%; height: 100%;
+    display: grid;
+    grid-template-rows: 36px 1fr;
+    grid-template-columns: 1fr;
+  }
+
+  /* Top bar */
+  .top-bar {
+    background: #0d1118;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px; font-size: 12px;
+  }
+
+  /* Main grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    grid-template-rows: 1fr;
+    height: 100%; overflow: hidden;
+  }
+
+  .waves-area {
+    display: flex; flex-direction: column;
+    padding: 4px; gap: 2px; overflow: hidden;
+  }
+
+  .wave-row {
+    flex: 1; min-height: 0;
+    position: relative;
+    border-bottom: 1px solid #141c24;
+  }
+  .wave-row canvas { width: 100%; height: 100%; display: block; }
+
+  .wave-label {
+    position: absolute; top: 2px; left: 6px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+    z-index: 2; text-shadow: 0 0 4px currentColor;
+  }
+
+  /* Right panel numerics */
+  .numerics-panel {
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .num-block {
+    flex: 1; min-height: 0;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative;
+  }
+
+  .num-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; opacity: 0.85; }
+  .num-value { font-size: 42px; font-weight: 700; line-height: 1; letter-spacing: -1px; text-shadow: 0 0 12px currentColor; }
+  .num-unit { font-size: 9px; opacity: 0.6; }
+  .num-sub { font-size: 13px; opacity: 0.8; }
+
+  .alarm-hi, .alarm-lo {
+    position: absolute; right: 6px; font-size: 9px; opacity: 0.4;
+  }
+  .alarm-hi { top: 4px; }
+  .alarm-lo { bottom: 4px; }
+
+  @keyframes alarm-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+  .alarming .num-value { animation: alarm-blink 0.6s infinite; }
+
+  /* Settings panel overlay */
+  .settings-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 100; display: none; align-items: center; justify-content: center;
+  }
+  .settings-overlay.open { display: flex; }
+
+  .settings-box {
+    background: #141c26; border: 1px solid #2a3a4a; border-radius: 8px;
+    width: 90%; max-width: 600px; max-height: 85%; overflow-y: auto;
+    padding: 20px; color: #c8d0d8;
+  }
+
+  .settings-box h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #fff; }
+
+  .param-settings {
+    border: 1px solid #1e2a36; border-radius: 6px; padding: 12px; margin-bottom: 12px;
+  }
+  .param-settings summary {
+    cursor: pointer; font-weight: 600; font-size: 13px; list-style: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .param-settings summary::before { content: '▶'; font-size: 10px; transition: transform 0.2s; }
+  .param-settings[open] summary::before { transform: rotate(90deg); }
+
+  .field-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;
+  }
+  .field-grid label { font-size: 11px; opacity: 0.7; display: block; margin-bottom: 2px; }
+  .field-grid input, .field-grid select {
+    width: 100%; background: #0a0e14; border: 1px solid #2a3a4a; border-radius: 4px;
+    padding: 4px 6px; color: #fff; font-size: 12px; font-family: inherit;
+  }
+  .field-grid input[type="color"] { height: 28px; padding: 1px; cursor: pointer; }
+  .field-grid input[type="checkbox"] { width: auto; }
+
+  .btn-close-settings {
+    background: #1e6a40; color: #fff; border: none; border-radius: 4px;
+    padding: 8px 20px; cursor: pointer; font-family: inherit; font-weight: 600;
+    margin-top: 8px;
+  }
+
+  .gear-btn {
+    background: none; border: 1px solid #2a3a4a; color: #8899aa; border-radius: 4px;
+    padding: 2px 8px; cursor: pointer; font-size: 11px; font-family: inherit;
+  }
+  .gear-btn:hover { color: #fff; border-color: #4a5a6a; }
+  </style>
+</head>
+<body>
+  <div class="monitor-wrapper" id="monitor">
+    <div class="top-bar">
+      <div style="display:flex;gap:16px;align-items:center;">
+        <span style="color:#4a9eff;font-weight:700;" id="patientDisplay">Paciente: ---</span> 
+        <span style="color:#6a7a8a;" id="bedDisplay">Leito: UTI-01</span>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <span class="mono" id="clock">00:00:00</span> 
+        <button class="gear-btn" onclick="toggleSettings()">⚙ Editar</button>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="waves-area" id="wavesArea">
+        <div class="wave-row" id="wave-ecg"><span class="wave-label" style="color:var(--ecg-color);">II ECG</span>
+          <canvas></canvas>
+        </div>
+        <div class="wave-row" id="wave-spo2"><span class="wave-label" style="color:var(--spo2-color);">SpO₂ Pleth</span>
+          <canvas></canvas>
+        </div>
+        <div class="wave-row" id="wave-rr"><span class="wave-label" style="color:var(--rr-color);">Resp</span>
+          <canvas></canvas>
+        </div>
+        <div class="wave-row" id="wave-etco2"><span class="wave-label" style="color:var(--etco2-color);">EtCO₂</span>
+          <canvas></canvas>
+        </div>
+      </div>
+      
+      <div class="numerics-panel" id="numericsPanel"></div>
+    </div>
+  </div>
+
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-box">
+      <h2>⚙ Configurações do Monitor</h2>
+      <div id="settingsContent"></div>
+      <button class="btn-close-settings" onclick="toggleSettings()">Fechar</button>
+    </div>
+  </div>
+
+<script>
+// === PARAMETER CONFIGURATION ===
+const params = [
+  { id: 'hr', label: 'FC', unit: 'bpm', color: '#00ff41', value: 78, alarmHi: 120, alarmLo: 50, visible: true, wave: 'ecg' },
+  { id: 'spo2', label: 'SpO₂', unit: '%', color: '#00d4ff', value: 98, alarmHi: 100, alarmLo: 90, visible: true, wave: 'spo2' },
+  { id: 'nibp', label: 'PNI', unit: 'mmHg', color: '#ff3333', value: 120, valueSub: '80', alarmHi: 160, alarmLo: 80, visible: true },
+  { id: 'rr', label: 'FR', unit: 'rpm', color: '#ffcc00', value: 16, alarmHi: 30, alarmLo: 8, visible: true, wave: 'rr' },
+  { id: 'temp', label: 'Temp', unit: '°C', color: '#ff8800', value: 36.5, alarmHi: 38.5, alarmLo: 35.0, visible: true },
+  { id: 'etco2', label: 'EtCO₂', unit: 'mmHg', color: '#cc88ff', value: 35, alarmHi: 50, alarmLo: 25, visible: true, wave: 'etco2' }
+];
+
+// UI Builders
+function buildNumerics() {
+  const panel = document.getElementById('numericsPanel');
+  panel.innerHTML = '';
+  params.forEach(p => {
+    if (!p.visible) return;
+    const isAlarming = p.value > p.alarmHi || p.value < p.alarmLo;
+    const block = document.createElement('div');
+    block.className = 'num-block' + (isAlarming ? ' alarming' : '');
+    block.id = 'num-' + p.id;
+    block.innerHTML = `
+      <span class="alarm-hi" style="color:${p.color}">▲${p.alarmHi}</span>
+      <span class="num-label" style="color:${p.color}">${p.label}</span>
+      <span class="num-value mono" style="color:${p.color}">${p.value}</span>
+      ${p.valueSub ? `<span class="num-sub mono" style="color:${p.color}">/${p.valueSub}</span>` : ''}
+      <span class="num-unit">${p.unit}</span>
+      <span class="alarm-lo" style="color:${p.color}">▼${p.alarmLo}</span>
+    `;
+    panel.appendChild(block);
+  });
+}
+
+function buildSettings() {
+  const c = document.getElementById('settingsContent');
+  c.innerHTML = '';
+  params.forEach(p => {
+    const d = document.createElement('details');
+    d.className = 'param-settings';
+    d.innerHTML = `
+      <summary style="color:${p.color}">${p.label} (${p.id})</summary>
+      <div class="field-grid">
+        <div><label>Nome</label><input type="text" value="${p.label}" data-id="${p.id}" data-field="label"></div>
+        <div><label>Unidade</label><input type="text" value="${p.unit}" data-id="${p.id}" data-field="unit"></div>
+        <div><label>Valor</label><input type="number" step="0.1" value="${p.value}" data-id="${p.id}" data-field="value"></div>
+        ${p.valueSub !== undefined ? `<div><label>Valor Sub (diast.)</label><input type="text" value="${p.valueSub}" data-id="${p.id}" data-field="valueSub"></div>` : '<div></div>'}
+        <div><label>Alarme Alto</label><input type="number" step="0.1" value="${p.alarmHi}" data-id="${p.id}" data-field="alarmHi"></div>
+        <div><label>Alarme Baixo</label><input type="number" step="0.1" value="${p.alarmLo}" data-id="${p.id}" data-field="alarmLo"></div>
+        <div><label>Cor</label><input type="color" value="${p.color}" data-id="${p.id}" data-field="color"></div>
+        <div style="display:flex;align-items:end;gap:6px;padding-bottom:4px;">
+          <label><input type="checkbox" ${p.visible ? 'checked' : ''} data-id="${p.id}" data-field="visible"> Visível</label>
+        </div>
+      </div>
+    `;
+    c.appendChild(d);
+  });
+
+  c.addEventListener('input', (e) => {
+    const t = e.target;
+    const id = t.dataset.id;
+    const field = t.dataset.field;
+    if (!id || !field) return;
+    const p = params.find(x => x.id === id);
+    if (!p) return;
+    if (field === 'visible') p[field] = t.checked;
+    else if (field === 'value' || field === 'alarmHi' || field === 'alarmLo') p[field] = parseFloat(t.value) || 0;
+    else p[field] = t.value;
+    buildNumerics();
+    updateWaveLabels();
+  });
+}
+
+function updateWaveLabels() {
+  params.forEach(p => {
+    if (!p.wave) return;
+    const row = document.getElementById('wave-' + p.wave);
+    if (!row) return;
+    const lbl = row.querySelector('.wave-label');
+    if (lbl) { lbl.style.color = p.color; }
+    row.style.display = p.visible ? '' : 'none';
+  });
+}
+
+function toggleSettings() {
+  document.getElementById('settingsOverlay').classList.toggle('open');
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('pt-BR');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Simulation Noise (Oscilação dos valores)
+setInterval(() => {
+  params.forEach(p => {
+    if (p.id === 'hr') p.value = Math.round(p.value + (Math.random() - 0.5) * 2) || 78;
+    if (p.id === 'rr') { const v = p.value + (Math.random() - 0.5) * 0.6; p.value = Math.round(v) || 16; }
+    if (p.id === 'spo2') p.value = Math.min(100, Math.max(90, p.value + Math.round((Math.random() - 0.4) * 0.5)));
+    if (p.id === 'etco2') p.value = Math.round(p.value + (Math.random() - 0.5) * 1) || 35;
+    if (p.id === 'temp') p.value = Math.round((p.value + (Math.random() - 0.5) * 0.05) * 10) / 10 || 36.5;
+  });
+  buildNumerics();
+}, 2000);
+
+// === NOVO WAVEFORM ENGINE (Interpolação Contínua e Gráficos Suaves) ===
+const waveforms = {};
+
+// Funções Matemáticas das Ondas
+const ecgShape = (t) => {
+    if(t > 0.1 && t < 0.15) return -0.1 * Math.sin((t-0.1)*Math.PI/0.05); 
+    if(t > 0.3 && t < 0.32) return 0.2; 
+    if(t > 0.32 && t < 0.35) return -0.8; 
+    if(t > 0.35 && t < 0.38) return 0.3; 
+    if(t > 0.5 && t < 0.6) return -0.2 * Math.sin((t-0.5)*Math.PI/0.1); 
+    return 0; 
+};
+
+const spo2Shape = (t) => {
+    if (t < 0.3) return -Math.sin((t / 0.3) * (Math.PI / 2)) * 0.8;
+    else if (t < 0.5) return -0.8 + Math.sin(((t - 0.3) / 0.2) * (Math.PI / 2)) * 0.5;
+    else if (t < 0.65) return -0.3 - Math.sin(((t - 0.5) / 0.15) * Math.PI) * 0.15;
+    else return -0.3 + Math.sin(((t - 0.65) / 0.35) * (Math.PI / 2)) * 0.3;
+};
+
+const respShape = (t) => {
+    return -Math.sin(t * Math.PI * 2) * 0.6; // Onda sinusoidal simples e suave para Respiração
+};
+
+const capnoShape = (t) => {
+    if (t > 0.1 && t < 0.2) return -(t-0.1)*8; 
+    if (t >= 0.2 && t < 0.6) return -0.8 - (t-0.2)*0.1; 
+    if (t >= 0.6 && t < 0.7) return -0.9 + (t-0.6)*9; 
+    return 0; 
+};
+
+function initWaves() {
+  const configs = [
+    { id: 'ecg', fn: ecgShape },
+    { id: 'spo2', fn: spo2Shape },
+    { id: 'rr', fn: respShape },
+    { id: 'etco2', fn: capnoShape }
+  ];
+
+  configs.forEach(cfg => {
+    const row = document.getElementById('wave-' + cfg.id);
+    if (!row) return;
+    const canvas = row.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    // Estado individual para cada onda
+    waveforms[cfg.id] = { 
+      canvas, ctx, fn: cfg.fn, 
+      scanX: 0, prevX: 0, prevY: null, time: 0 
+    };
+  });
+}
+
+function resizeCanvases() {
+  Object.values(waveforms).forEach(w => {
+    const rect = w.canvas.parentElement.getBoundingClientRect();
+    // Usa tamanho real sem multiplicar pelo ratio para facilitar a interpolação pixel a pixel
+    w.canvas.width = rect.width;
+    w.canvas.height = rect.height;
+  });
+}
+
+const speed = 2.5; // Velocidade de varredura do feixe (X)
+const clearWidth = 35; // Largura do "laser" que apaga a linha antiga à frente
+
+function drawWaves() {
+  // Pega os valores atuais que ditam a frequência das ondas
+  const hrVal = params.find(p => p.id === 'hr').value || 80;
+  const rrVal = params.find(p => p.id === 'rr').value || 16;
+
+  Object.entries(waveforms).forEach(([id, w]) => {
+    const p = params.find(x => x.wave === id);
+    
+    // Se o parâmetro foi desabilitado nas configurações, não renderiza
+    if (!p || !p.visible) return; 
+
+    const { canvas, ctx, fn } = w;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Define a velocidade de animação baseada no valor numérico da interface
+    let cycleSpeed = 0;
+    if (id === 'ecg' || id === 'spo2') cycleSpeed = (hrVal / 60) * 0.02;
+    if (id === 'rr' || id === 'etco2') cycleSpeed = (rrVal / 60) * 0.02;
+
+    // Calcula o valor Y puro (de 0 a -0.9) e aplica a escala visual dependendo do gráfico
+    let val = fn(w.time % 1);
+    let y = height / 2;
+
+    if (id === 'ecg') y = height * 0.6 + val * height * 0.45;
+    if (id === 'spo2') y = height * 0.9 + val * height * 0.8; // Ancora na base
+    if (id === 'rr') y = height * 0.5 + val * height * 0.4;
+    if (id === 'etco2') y = height * 0.9 + val * height * 0.8; // Ancora na base
+
+    // Inicialização do Y anterior no primeiro frame
+    if (w.prevY === null) w.prevY = y;
+
+    // "Efeito Monitor": Apaga um quadrado à frente da agulha de desenho
+    ctx.clearRect(w.scanX, 0, clearWidth, height);
+
+    // Desenha a linha conectando o frame anterior com o atual
+    ctx.beginPath();
+    ctx.strokeStyle = p.color; // A cor atualiza em tempo real com as configurações
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // Evita desenhar uma linha cortando a tela toda quando o cursor zera
+    if (w.scanX >= w.prevX) {
+      ctx.moveTo(w.prevX, w.prevY);
+      ctx.lineTo(w.scanX, y);
+      ctx.stroke();
+    }
+
+    // Atualiza o estado
+    w.prevX = w.scanX;
+    w.prevY = y;
+    w.scanX += speed;
+
+    // Reseta a varredura ao atingir a borda direita
+    if (w.scanX >= width) {
+      w.scanX = 0;
+      w.prevX = 0;
+    }
+
+    w.time += cycleSpeed;
+  });
+
+  requestAnimationFrame(drawWaves);
+}
+
+// Inicialização
+buildNumerics();
+buildSettings();
+initWaves();
+resizeCanvases();
+window.addEventListener('resize', resizeCanvases);
+requestAnimationFrame(drawWaves);
+
+</script>
+</body>
+</html>
