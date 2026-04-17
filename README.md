@@ -1,5 +1,7 @@
 # 🩺 Monitor Multiparâmetros - Simulador Clínico
 
+[CLIQUE AQUI PARA TESTAR O MONITOR AO VIVO] https://ghyoshinari.github.io/monitor-multiparametros/index.html
+
 Este projeto nasceu de uma necessidade real da Profa. Samantha (SENAC) e foi desenvolvido ao vivo/em bastidores pelo **Prof. Dr. Gerson Yoshinari** para o canal **Sandeco**.
 
 O objetivo é fornecer um simulador de sinais vitais de alta fidelidade, totalmente gratuito e que funcione sem internet em laboratórios de prática profissional.
